@@ -3,9 +3,9 @@ const path = require('path')
 const redis = require('redis')
 const bcrypt = require('bcrypt')
 const session = require('express-session')
-const client = redis.createClient()
 
 const app = express()
+const client = redis.createClient()
 
 const RedisStore = require('connect-redis')(session)
 
@@ -38,48 +38,55 @@ app.get('/', (req, res) => {
 app.post('/', (req, res) => {
   const { username, password } = req.body
 
-  const saveSessionAndRenderDashboard = (userid) => {
-    req.session.userid = userid
-    req.session.save()
-    res.render('dashboard')
-  }
-
   if (!username || !password) {
     res.render('error', {
       message: 'Please set both username and password',
     })
     return
   }
-  console.log(req.body, username, password)
+
+  const saveSessionAndRenderDashboard = (userid) => {
+    req.session.userid = userid
+    req.session.save()
+    res.render('dashboard')
+  }
+
+  const handleSignup = (username, password) => {
+    client.incr('userid', async (err, userid) => {
+      client.hset('users', username, userid)
+
+      const saltRounds = 10
+      const hash = await bcrypt.hash(password, saltRounds)
+
+      client.hset(`user:${userid}`, 'hash', hash, 'username', username)
+
+      saveSessionAndRenderDashboard()
+    })
+  }
+
+  const handleLogin = (userid, password) => {
+    client.hget(`user:${userid}`, 'hash', async (err, hash) => {
+      const result = await bcrypt.compare(password, hash)
+      if (result) {
+        // password OK
+        saveSessionAndRenderDashboard()
+      } else {
+        // wrong password
+        res.render('error', {
+          message: 'Incorrect password!',
+        })
+        return
+      }
+    })
+  }
 
   client.hget('users', username, (err, userid) => {
     if (!userid) {
       // user doesnot exist, signup procedure
-      client.incr('userid', async (err, userid) => {
-        client.hset('users', username, userid)
-
-        const saltRounds = 10
-        const hash = await bcrypt.hash(password, saltRounds)
-
-        client.hset(`user:${userid}`, 'hash', hash, 'username', username)
-
-        saveSessionAndRenderDashboard()
-      })
+      handleSignup(username, password)
     } else {
       // login procedure
-      client.hget(`user:${userid}`, 'hash', async (err, hash) => {
-        const result = await bcrypt.compare(password, hash)
-        if (result) {
-          // password OK
-          saveSessionAndRenderDashboard()
-        } else {
-          // wrong password
-          res.render('error', {
-            message: 'Incorrect password!',
-          })
-          return
-        }
-      })
+      handleLogin(userid, password)
     }
   })
 })
