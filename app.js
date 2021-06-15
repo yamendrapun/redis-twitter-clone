@@ -18,7 +18,7 @@ app.use(
     resave: true,
     saveUninitialized: true,
     cookie: {
-      maxAge: 36000000, // 10 hours, in milliseconds
+      maxAge: 36000000,
       httpOnly: false,
       secure: false,
     },
@@ -37,7 +37,7 @@ const alrange = promisify(client.lrange).bind(client)
 
 app.get('/', async (req, res) => {
   if (req.session.userid) {
-    const currentUsername = await ahget(
+    const currentUserName = await ahget(
       `user:${req.session.userid}`,
       'username'
     )
@@ -45,7 +45,7 @@ app.get('/', async (req, res) => {
     const users = await ahkeys('users')
 
     const timeline = []
-    const posts = await alrange(`timeline: ${currentUsername}`, 0, 100)
+    const posts = await alrange(`timeline:${currentUserName}`, 0, 100)
 
     for (post of posts) {
       const timestamp = await ahget(`post:${post}`, 'timestamp')
@@ -56,16 +56,16 @@ app.get('/', async (req, res) => {
 
       timeline.push({
         message: await ahget(`post:${post}`, 'message'),
-        author: await ahget(`post: ${post}`, 'username'),
+        author: await ahget(`post:${post}`, 'username'),
         timeString: timeString,
       })
     }
 
     res.render('dashboard', {
       users: users.filter(
-        (user) => user !== currentUsername && following.indexOf(user) === -1
+        (user) => user !== currentUserName && following.indexOf(user) === -1
       ),
-      currentUsername,
+      currentUserName,
       timeline,
     })
   } else {
@@ -88,7 +88,7 @@ app.post('/post', async (req, res) => {
   }
 
   const { message } = req.body
-  const currentUserName = await ahget(`user:${req.session.userid}`, username)
+  const currentUserName = await ahget(`user:${req.session.userid}`, 'username')
   const postid = await aincr('postid')
   client.hmset(
     `post:${postid}`,
@@ -120,11 +120,11 @@ app.post('/follow', (req, res) => {
   const { username } = req.body
 
   client.hget(
-    `user: ${req.session.userid}`,
+    `user:${req.session.userid}`,
     'username',
     (err, currentUserName) => {
-      client.sadd(`following: ${currentUserName}`, username)
-      client.sadd(`followers: ${username}`, currentUserName)
+      client.sadd(`following:${currentUserName}`, username)
+      client.sadd(`followers:${username}`, currentUserName)
     }
   )
 
@@ -156,7 +156,7 @@ app.post('/', (req, res) => {
 
       client.hset(`user:${userid}`, 'hash', hash, 'username', username)
 
-      saveSessionAndRenderDashboard()
+      saveSessionAndRenderDashboard(userid)
     })
   }
 
@@ -164,12 +164,10 @@ app.post('/', (req, res) => {
     client.hget(`user:${userid}`, 'hash', async (err, hash) => {
       const result = await bcrypt.compare(password, hash)
       if (result) {
-        // password OK
-        saveSessionAndRenderDashboard()
+        saveSessionAndRenderDashboard(userid)
       } else {
-        // wrong password
         res.render('error', {
-          message: 'Incorrect password!',
+          message: 'Incorrect password',
         })
         return
       }
@@ -178,13 +176,13 @@ app.post('/', (req, res) => {
 
   client.hget('users', username, (err, userid) => {
     if (!userid) {
-      // signup procedure
+      //signup procedure
       handleSignup(username, password)
     } else {
-      // login procedure
+      //login procedure
       handleLogin(userid, password)
     }
   })
 })
 
-app.listen(3000, () => console.log('server ready!'))
+app.listen(3000, () => console.log('Server ready'))
