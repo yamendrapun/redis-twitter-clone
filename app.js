@@ -35,6 +35,14 @@ app.get('/', (req, res) => {
   }
 })
 
+app.get('/post', (req, res) => {
+  if (req.session.userid) {
+    res.render('post')
+  } else {
+    res.render('login')
+  }
+})
+
 app.post('/', (req, res) => {
   const { username, password } = req.body
 
@@ -88,6 +96,28 @@ app.post('/', (req, res) => {
       // login procedure
       handleLogin(userid, password)
     }
+  })
+})
+
+app.post('/post', (req, res) => {
+  if (!req.session.userid) {
+    res.render('login')
+    return
+  }
+
+  const { message } = req.body
+
+  client.incr('postid', async (err, postid) => {
+    client.hmset(
+      `post:${postid}`,
+      'userid',
+      req.session.userid,
+      'message',
+      message,
+      'timestamp',
+      Date.now()
+    )
+    res.render('dashboard')
   })
 })
 
