@@ -1,5 +1,8 @@
 const express = require('express')
 const path = require('path')
+const redis = require('redis')
+const bcrypt = require('bcrypt')
+const client = redis.createClient()
 const app = express()
 
 app.use(express.urlencoded({ extended: true }))
