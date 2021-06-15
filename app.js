@@ -27,10 +27,22 @@ app.use(
 app.set('view engine', 'pug')
 app.set('views', path.join(__dirname, 'views'))
 
-app.get('/', (req, res) => res.render('index'))
+app.get('/', (req, res) => {
+  if (req.session.userid) {
+    res.render('dashboard')
+  } else {
+    res.render('login')
+  }
+})
 
 app.post('/', (req, res) => {
   const { username, password } = req.body
+
+  const saveSessionAndRenderDashboard = (userid) => {
+    req.session.userid = userid
+    req.session.save()
+    res.render('dashboard')
+  }
 
   if (!username || !password) {
     res.render('error', {
@@ -44,23 +56,32 @@ app.post('/', (req, res) => {
     if (!userid) {
       // user doesnot exist, signup procedure
       client.incr('userid', async (err, userid) => {
-        client.heset('users', username, userid)
+        client.hset('users', username, userid)
+
         const saltRounds = 10
         const hash = await bcrypt.hash(password, saltRounds)
+
         client.hset(`user:${userid}`, 'hash', hash, 'username', username)
+
+        saveSessionAndRenderDashboard()
       })
     } else {
+      // login procedure
       client.hget(`user:${userid}`, 'hash', async (err, hash) => {
         const result = await bcrypt.compare(password, hash)
         if (result) {
           // password OK
+          saveSessionAndRenderDashboard()
         } else {
           // wrong password
+          res.render('error', {
+            message: 'Incorrect password!',
+          })
+          return
         }
       })
     }
   })
-  res.end()
 })
 
 app.listen(3000, () => console.log('server ready!'))
